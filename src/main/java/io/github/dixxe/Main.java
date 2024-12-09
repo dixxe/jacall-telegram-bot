@@ -28,30 +28,6 @@ class JacallBot extends Bot {
 
     }
 
-    @Override
-    public void botSendMessage(String chatId, String message) {
-        SendMessage sendMessage = new SendMessage(chatId, message);
-        try {
-            telegramClient.execute(sendMessage);
-        } catch (TelegramApiException e) {
-            botSendError(chatId, e);
-            e.printStackTrace();
-        }
-    }
-
-    @Override
-    public void botSendError(String chatId, Exception er) {
-        String errorText = String.format("Ух!! Тут случился JavaException! Зарепорти меня @d1xxe!\n```\nat %s\n%s\n```",
-                er.getStackTrace()[0], er);
-        SendMessage sendMessage = new SendMessage(chatId, errorText);
-        er.printStackTrace();
-        try {
-            telegramClient.execute(sendMessage);
-        } catch (TelegramApiException e) {
-            e.printStackTrace();
-        }
-    }
-
     private enum Commands {
         start("/start", "Command to start bot"),
         help("/help", "FAQ how to use bot"),
