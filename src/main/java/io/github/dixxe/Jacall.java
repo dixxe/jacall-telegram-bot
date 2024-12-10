@@ -1,8 +1,14 @@
 package io.github.dixxe;
 
 import org.telegram.telegrambots.client.okhttp.OkHttpTelegramClient;
+import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardRow;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
+import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.util.Arrays;
 
@@ -24,9 +30,8 @@ class JacallBot extends Bot {
             }
             Message recievedMessage = update.getMessage();
             String chatID = recievedMessage.getChatId().toString();
-            String messageContent = recievedMessage.getText();
 
-            handleCommands(messageContent, chatID);
+            handleCommands(recievedMessage, chatID);
 
         } catch (Exception e) {
             botSendError(update.getMessage().getChatId().toString(), e);
@@ -34,7 +39,8 @@ class JacallBot extends Bot {
 
     }
     @Override
-    protected void handleCommands(String content, String chatID) {
+    protected void handleCommands(Message msg, String chatID) {
+        String content = msg.getText();
         // Here I seperate command from *arguments* in future I *probably* move it to Command class.
         String commandName = content.split(" ")[0];
         String requestedCommand = null;
@@ -48,7 +54,22 @@ class JacallBot extends Bot {
         }
         // Don't forget java switch are NOT EXHAUSTIVE!!
         switch (requestedCommand) {
-            case "/start" -> botSendMessage(chatID, String.format("Вас приветствует бот написанный на джаве!\n"));
+            // Robust usage example:
+            case "/start" -> {
+                SendMessage reply = new SendMessage(chatID, "Вас приветствует бот на джаве!");
+                reply.setReplyMarkup(ReplyKeyboardMarkup
+                        .builder()
+                        .keyboardRow(new KeyboardRow("/help", "/huba-buba"))
+                        .resizeKeyboard(true)
+                        .build()
+                );
+
+                try {
+                    telegramClient.execute(reply);
+                } catch (TelegramApiException e) {
+                    throw new RuntimeException(e);
+                }
+            }
             case "/help" -> botSendMessage(chatID, getHelpMessage());
             case "/huba-buba" -> botSendMessage(chatID, "Почему у телеграмма команды после черточки ломаются?");
         }
