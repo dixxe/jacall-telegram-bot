@@ -1,5 +1,6 @@
 package io.github.dixxe;
 
+import org.apache.commons.lang3.SerializationUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.Nullable;
 import org.telegram.telegrambots.client.okhttp.OkHttpTelegramClient;
@@ -10,18 +11,25 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMar
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
+import java.io.*;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 
 class JacallBot extends Bot {
+    private List<Thread> activeThreads = new ArrayList<>();
     public JacallBot(String botToken) {
         super(botToken, new OkHttpTelegramClient(botToken));
         registerCommand("/start", "Command that starts bot");
         registerCommand("/help", "FAQ command");
-        registerCommand("/remindme", " [dd.MM.yy-HH:mm] [текст_для_напоминания] - Команда напоминалка!");
+        registerCommand("/remindme", "[dd.MM.yy-HH:mm] [текст_для_напоминания] - Команда напоминалка!");
+        registerCommand("/threads", "Получить список всех тредов бота");
     }
 
     @Override
@@ -66,65 +74,74 @@ class JacallBot extends Bot {
         // Real processing steps:
         // Don't forget java switch are NOT EXHAUSTIVE!!
         switch (requestedCommand) {
-            // Robust usage example:
-            case "/start" -> {
-                // Start should work only in user chats.
-                if (!msg.getChat().isUserChat()) { return; }
-
-                SendMessage reply = new SendMessage(chatID, "Вас приветствует бот на джаве!");
-                reply.setReplyMarkup(ReplyKeyboardMarkup
-                        .builder()
-                        .keyboardRow(new KeyboardRow("/help", "/remindme"))
-                        .resizeKeyboard(true)
-                        .build()
-                );
-
-                try {
-                    telegramClient.execute(reply);
-                } catch (TelegramApiException e) {
-                    throw new RuntimeException(e);
-                }
-            }
+            // Separate each command for own method it's much clearer.
+            case "/start" -> handleStartCommand(msg, chatID);
             case "/help" -> botSendMessage(chatID, getHelpMessage());
-            case "/remindme" -> {
-                if (commandArgs.isEmpty()) {
-                    botSendMessage(chatID,
-                            String.format("Команда напоминалка!\nПример использования: \'/remindme 15.12.24-21:22 привет мир!\'"));
-                    return;
-                }
-                // There's HELLA bunch of try-catch blocks. Welcome to JAVA BOII
-                try {
-                    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd.MM.yy-HH:mm");
-                    LocalDateTime timeToRemind = LocalDateTime.parse(commandArgs.get(0), formatter);
-                    LocalDateTime currentCheckTime = LocalDateTime.now();
-
-                    String textToRemind = StringUtils.join(commandArgs.subList(1, commandArgs.size()), " ");
-
-                    Thread remindThread = getRemindThread(msg, chatID, currentCheckTime, timeToRemind, textToRemind);
-                    if (remindThread == null) return;
-                    remindThread.start();
-                    botSendMessage(chatID, "Напоминалка поставлена!");
-                } catch (Exception _e) {
-                    botSendMessage(chatID, "Недостаточно аргументов или они неправильно введены!");
-                }
-
-            }
+            case "/remindme" -> handleRemindMeCommand(msg, chatID, commandArgs);
+            case "/threads" -> handleThreadsCommand(chatID);
         }
     }
 
-    @Nullable
+    private void handleThreadsCommand(String chatID) {
+        botSendMessage(chatID, activeThreads.toString());
+    }
+
+    private void handleRemindMeCommand(Message msg, String chatID, List<String> commandArgs) {
+        if (commandArgs.isEmpty()) {
+            botSendMessage(chatID,
+                    "Команда напоминалка!\nПример использования: \'/remindme 15.12.24-21:22 привет мир!\'");
+            return;
+        }
+        // There's HELLA bunch of try-catch blocks. Welcome to JAVA BOII
+        try {
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd.MM.yy-HH:mm");
+            LocalDateTime timeToRemind = LocalDateTime.parse(commandArgs.get(0), formatter);
+            LocalDateTime currentCheckTime = LocalDateTime.now();
+
+            String textToRemind = StringUtils.join(commandArgs.subList(1, commandArgs.size()), " ");
+
+            if (currentCheckTime.isAfter(timeToRemind)) {
+                botSendMessage(chatID, "Вы запланировали напоминалку в прошлое!");
+                return;
+            }
+
+            Thread remindThread = getRemindThread(msg, chatID, currentCheckTime, timeToRemind, textToRemind);
+            activeThreads.add(remindThread);
+            remindThread.start();
+            botSendMessage(chatID, "Напоминалка поставлена!");
+        } catch (Exception _e) {
+            botSendMessage(chatID, "Недостаточно аргументов или они неправильно введены!");
+        }
+    }
+
+    private void handleStartCommand(Message msg, String chatID) {
+        // Start should work only in user chats.
+        if (!msg.getChat().isUserChat()) {
+            return;
+        }
+
+        SendMessage reply = new SendMessage(chatID, "Вас приветствует бот на джаве!");
+        reply.setReplyMarkup(ReplyKeyboardMarkup
+                .builder()
+                .keyboardRow(new KeyboardRow("/help", "/remindme"))
+                .resizeKeyboard(true)
+                .build()
+        );
+
+        try {
+            telegramClient.execute(reply);
+        } catch (TelegramApiException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private Thread getRemindThread(Message msg,
                                    String chatID,
                                    LocalDateTime currentCheckTime,
                                    LocalDateTime timeToRemind,
                                    String textToRemind) {
 
-        if (currentCheckTime.isAfter(timeToRemind)) {
-            botSendMessage(chatID, "Вы запланировали напоминалку в прошлое!");
-            return null;
-        }
-
-        Thread remindThread = new Thread(() -> {
+        return new Thread(() -> {
             LocalDateTime currentTime = LocalDateTime.now();
             while (!currentTime.isAfter(timeToRemind)) {
                 currentTime = LocalDateTime.now();
@@ -137,6 +154,27 @@ class JacallBot extends Bot {
             botSendMessage(chatID, String.format("Вы запланировали напоминалку \"%s\" @%s",
                     textToRemind, msg.getFrom().getUserName()));
         });
-        return remindThread;
+    }
+    // Wip method to saving data.
+    protected <T> Thread getSaveThread(String fileName, List<T> listToSave) {
+        Path workPath = Paths.get("");
+        File outputFile = new File(workPath + fileName + ".bin");
+
+        return new Thread(() -> {
+            try {
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                ObjectOutputStream oos = new ObjectOutputStream(bos);
+                oos.writeObject(listToSave);
+                byte[] data = bos.toByteArray();
+                FileOutputStream outputStream = new FileOutputStream(outputFile);
+                outputStream.write(data);
+                System.out.println("File saved successfully");
+            } catch (Exception e) {
+                // who cares lol
+                System.out.println(e);
+            }
+        });
+
     }
 }
+
