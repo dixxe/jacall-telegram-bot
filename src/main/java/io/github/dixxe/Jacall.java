@@ -83,7 +83,8 @@ class JacallBot extends Bot {
     }
 
     private void handleThreadsCommand(String chatID) {
-        botSendMessage(chatID, activeThreads.toString());
+        String readed = (String) Saver.readSaveFile("Reminders");
+        botSendMessage(chatID, readed);
     }
 
     private void handleRemindMeCommand(Message msg, String chatID, List<String> commandArgs) {
@@ -99,7 +100,7 @@ class JacallBot extends Bot {
             LocalDateTime currentCheckTime = LocalDateTime.now();
 
             String textToRemind = StringUtils.join(commandArgs.subList(1, commandArgs.size()), " ");
-
+            Saver.getSaveThread("Reminders", textToRemind + "\r\n", true).start();
             if (currentCheckTime.isAfter(timeToRemind)) {
                 botSendMessage(chatID, "Вы запланировали напоминалку в прошлое!");
                 return;
@@ -155,26 +156,6 @@ class JacallBot extends Bot {
                     textToRemind, msg.getFrom().getUserName()));
         });
     }
-    // Wip method to saving data.
-    protected <T> Thread getSaveThread(String fileName, List<T> listToSave) {
-        Path workPath = Paths.get("");
-        File outputFile = new File(workPath + fileName + ".bin");
 
-        return new Thread(() -> {
-            try {
-                ByteArrayOutputStream bos = new ByteArrayOutputStream();
-                ObjectOutputStream oos = new ObjectOutputStream(bos);
-                oos.writeObject(listToSave);
-                byte[] data = bos.toByteArray();
-                FileOutputStream outputStream = new FileOutputStream(outputFile);
-                outputStream.write(data);
-                System.out.println("File saved successfully");
-            } catch (Exception e) {
-                // who cares lol
-                System.out.println(e);
-            }
-        });
-
-    }
 }
 
